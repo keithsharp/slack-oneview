@@ -19,6 +19,8 @@
 
 import argparse
 import configparser
+import amqp
+import ssl
 
 from oneview import OneViewServer
 from slack import SlackServer
@@ -29,7 +31,10 @@ def parse_config_file(configfile):
 
     ov = OneViewServer(config['oneview']['server'],
                        config['oneview']['username'],
-                       config['oneview']['password'])
+                       config['oneview']['password'],
+                       config['oneview']['certfile'],
+                       config['oneview']['keyfile'],
+                       config['oneview']['caroot'],)
 
     ss = SlackServer(config['slack']['webhook'],
                      config['slack']['botname'],
@@ -37,14 +42,28 @@ def parse_config_file(configfile):
 
     return (ov, ss)
 
+def on_message(channel, method_frame, header_frame, body):
+    print('Got a message!')
+    channel.basic_ack(delivery_tag=method_frame.delivery_tag)
+
 def main():
     parser = argparse.ArgumentParser(description='Listen on the HP OneView SCMB and publish messages to Slack.')
-    parser.add_argument('-f', '--file', help='Path to the config file')
+    parser.add_argument('-f', '--file', required=True, help='Path to the config file')
     args = parser.parse_args()
     (ov, ss) = parse_config_file(args.file)
 
-    #print(ss.channel)
-    ss.post_message("Hello, World!")
+    ssl_options = {'ca_certs' : ov.caroot,
+                   'certfile' : ov.certfile,
+                   'keyfile' : ov.keyfile,
+                   'cert_reqs' : ssl.CERT_REQUIRED,
+                   'ssl_version' : ssl.PROTOCOL_TLSv1_1,
+                   'server_side' : False}
+
+    con = amqp.Connection(ov.server + ':5671', login_method='EXTERNAL', ssl=ssl_options)
+
+    con.close()
 
 if __name__ == '__main__':
     main()
+
+    https://github.com/HewlettPackard/python-hpOneView.git

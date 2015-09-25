@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 # Copyright 2015, Keith Sharp <keith.sharp@gmail.com>
 #
 # This file is part of Slack OneView.
@@ -15,16 +17,18 @@
 # You should have received a copy of the GNU General Public License
 # along with Slack OneView.  If not, see <http://www.gnu.org/licenses/>.
 
+import os
 import sys
+import time
 import argparse
 
-from hpOneView import *
+import hpOneView as hpov
 
 def generate_certificates(con):
     print('Generating certificates .', end="")
-    act = activity(con)
+    act = hpov.activity(con)
     request = {'type' : 'RabbitMqClientCertV2', 'commonName' : 'default'}
-    (task, _) = con.post(uri['rabbitmq'], request)
+    (task, _) = con.post(hpov.common.uri['rabbitmq'], request)
     count = 0
     while act.is_task_running(task):
         print('.', end="")
@@ -46,21 +50,21 @@ def generate_certificates(con):
     print(' done.')
 
 def get_root_ca_bundle(con, dir):
-    sec = security(con)
+    sec = hpov.security(con)
     cert = sec.get_cert_ca()
-    fd = os.open(os.path.join(dir, 'caroot.pem'), os.O_RDWR|os.O_CREAT)
-    os.write(fd, cert)
-    os.close(fd)
+    ca = open(os.path.join(dir, 'caroot.pem'), 'w+')
+    ca.write(cert)
+    ca.close()
 
 def get_certificate_pair(con, dir):
-    sec = security(con)
+    sec = hpov.security(con)
     cert = sec.get_rabbitmq_kp()
-    fd = os.open(os.path.join(dir, 'cert.pem'), os.O_RDWR|os.O_CREAT)
-    os.write(fd, cert['base64SSLCertData'])
-    os.close(fd)
-    fd = os.open(os.path.join(dir, 'key.pem'), os.O_RDWR|os.O_CREAT)
-    os.write(fd, cert['base64SSLKeyData'])
-    os.close(fd)
+    ca = open(os.path.join(dir, 'cert.pem'), 'w+')
+    ca.write(cert['base64SSLCertData'])
+    ca.close()
+    ca = open(os.path.join(dir, 'key.pem'), 'w+')
+    ca.write(cert['base64SSLKeyData'])
+    ca.close()
 
 def main():
     parser = argparse.ArgumentParser(description='Generate and download AMQP keys from HP OneView')
@@ -71,10 +75,10 @@ def main():
     parser.add_argument('-g', '--generate', action='store_true', help='Generate the keypair before download')
     args = parser.parse_args()
 
-    con = connection(args.server)
+    con = hpov.connection(args.server)
 
     try:
-        con.login({'username' : args.username, 'password' : args.password})
+        con.login({'userName' : args.username, 'password' : args.password})
     except:
         print('Login failed, please check server name, username, and password.')
         sys.exit(1)
