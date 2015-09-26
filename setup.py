@@ -55,6 +55,7 @@ setup(
         ],
     },
     install_requires = [
-
+        'amqp' >= 1.4.6,
+        'hpOneView >= '0.1'
     ],
 )

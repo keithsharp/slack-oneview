@@ -20,10 +20,15 @@
 import argparse
 import configparser
 import amqp
+import json
 import ssl
 
+from functools import partial
 from oneview import OneViewServer
 from slack import SlackServer
+
+# Global to hold the SlackServer object so we don't have to pass it to the AMQP callback
+ss = None
 
 def parse_config_file(configfile):
     config = configparser.ConfigParser()
@@ -36,21 +41,37 @@ def parse_config_file(configfile):
                        config['oneview']['keyfile'],
                        config['oneview']['caroot'],)
 
+    global ss
     ss = SlackServer(config['slack']['webhook'],
                      config['slack']['botname'],
                      config['slack']['channel'])
 
-    return (ov, ss)
+    return ov
 
-def on_message(channel, method_frame, header_frame, body):
-    print('Got a message!')
-    channel.basic_ack(delivery_tag=method_frame.delivery_tag)
+def on_message(channel, msg):
+    text = None
+    body = json.loads(msg.body)
+
+    if 'powerState' in body['changedAttributes']:
+        if 'PoweringOff' in body['newSubState']:
+            text = 'Server {} is powering off.'.format(body['resource']['name'])
+        elif 'PoweringOn' in body['newSubState']:
+            text = 'Server {} is powering on.'.format(body['resource']['name'])
+        elif 'Off' in body['newSubState']:
+            text = 'Server {} is now powered off.'.format(body['resource']['name'])
+        elif 'On' in body['newSubState']:
+            text = 'Server {} is now powered on.'.format(body['resource']['name'])
+
+        if text:
+            ss.post_message(text)
+
+    channel.basic_ack(msg.delivery_tag)
 
 def main():
     parser = argparse.ArgumentParser(description='Listen on the HP OneView SCMB and publish messages to Slack.')
     parser.add_argument('-f', '--file', required=True, help='Path to the config file')
     args = parser.parse_args()
-    (ov, ss) = parse_config_file(args.file)
+    ov = parse_config_file(args.file)
 
     ssl_options = {'ca_certs' : ov.caroot,
                    'certfile' : ov.certfile,
@@ -60,10 +81,16 @@ def main():
                    'server_side' : False}
 
     con = amqp.Connection(ov.server + ':5671', login_method='EXTERNAL', ssl=ssl_options)
+    ch = con.channel()
+    (qname, _, _) = ch.queue_declare()
+    ch.queue_bind(qname, 'scmb', 'scmb.server-hardware.#')
+    ch.basic_consume(qname, callback=partial(on_message, ch))
 
+    while ch.callbacks:
+        ch.wait()
+
+    ch.close()
     con.close()
 
 if __name__ == '__main__':
     main()
-
-    https://github.com/HewlettPackard/python-hpOneView.git

@@ -55,4 +55,3 @@ class SlackServer(object):
         req = urllib.request.Request(self.webhook, data=json.dumps(payload).encode('utf-8'),
                                      headers={'content-type' : 'application/json'})
         response = urllib.request.urlopen(req)
-        print(response.read().decode('utf-8'))

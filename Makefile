@@ -18,10 +18,10 @@
 .PHONY: docs clean build
 
 clean:
-	rm -rf es-virtualenv htmlcov
+	rm -rf es-virtualenv
 
 build:
-	virtualenv -p /usr/local/bin/python3 so-virtualenv && \
+	virtualenv -p python3 so-virtualenv && \
 		source so-virtualenv/bin/activate && \
 		pip install -r requirements.txt
 
